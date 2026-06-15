@@ -123,21 +123,18 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
 // @desc    Logout user / clear cookie
 // @route   GET /api/v1/auth/logout
 export const logoutUser = (req: Request, res: Response) => {
-    // Use the exact same path and options used in generateToken.ts
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict' as const,
-      path: '/', // THIS MUST MATCH generateToken.ts
-      expires: new Date(0), // Set to the past
-    };
-  
-    res.cookie('token', '', cookieOptions);
-  
-    res.status(200).json({
-      success: true,
-      message: 'Logged out successfully'
-    });
+  res.cookie('token', '', {
+    httpOnly: true,
+    secure: true,      // Must match generateToken
+    sameSite: 'none',  // Must match generateToken
+    path: '/',
+    expires: new Date(0), // Sets expiration to the past to delete the cookie
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Logged out successfully'
+  });
 };
 
 // @desc    Get current logged in user
