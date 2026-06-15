@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import User from '../models/User';
 import generateToken from '../utils/generateToken';
 import { AuthRequest } from '../middleware/authMiddleware';
+import jwt from 'jsonwebtoken';
 
 // @desc    Register a new user
 // @route   POST /api/v1/auth/register
@@ -91,23 +92,23 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
 // @desc    Authenticate user & get token
 // @route   POST /api/v1/auth/login
 // @access  Public
+// authController.ts
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
-
-    // 1. Find user by email and explicitly select the password field
     const user = await User.findOne({ email }).select('+password');
 
-    // 2. Verify user exists and password matches
     if (user && (await user.matchPassword(password))) {
-      generateToken(res, user._id as any);
+      // 1. Generate the token
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '30d' });
 
+      // 2. 🚀 Send the token in the JSON payload (Ignore res.cookie entirely)
       res.status(200).json({
         success: true,
+        token: token, 
         data: {
           _id: user._id,
           firstName: user.firstName,
-          lastName: user.lastName,
           email: user.email,
           role: user.role,
         },
@@ -116,7 +117,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error' });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
