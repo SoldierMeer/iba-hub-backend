@@ -1,6 +1,5 @@
 import express from 'express';
-import { getLeaderboard } from '../controllers/userController';
-import { protect, optionalAuth } from '../middlewares/authMiddleware';
+import { protect, optionalAuth } from '../middleware/authMiddleware';
 import { 
     getLeaderboard, 
     getMe, 

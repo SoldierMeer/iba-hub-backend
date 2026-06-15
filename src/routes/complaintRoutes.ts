@@ -9,7 +9,7 @@ import {
   deleteComment,
   deleteComplaint
 } from '../controllers/complaintController';
-import { protect, authorizeRoles } from '../middlewares/authMiddleware';
+import { protect, authorizeRoles } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

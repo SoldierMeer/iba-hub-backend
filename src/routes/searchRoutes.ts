@@ -1,6 +1,6 @@
 import express from 'express';
 import { globalSearch } from '../controllers/searchController';
-import { protect } from '../middlewares/authMiddleware';
+import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

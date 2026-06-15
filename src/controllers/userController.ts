@@ -5,7 +5,8 @@ import Resource from '../models/Resource';
 import ForumReply from '../models/ForumReply';
 import Connection from '../models/Connection';
 import { v2 as cloudinary } from 'cloudinary';
-import { Response } from 'express';
+import jwt from 'jsonwebtoken';
+import { Request, Response } from 'express';
 
 
 // @desc    Get Global Leaderboard
@@ -293,8 +294,7 @@ export const getUserActivity = async (req: Request | any, res: Response): Promis
     }
 };
 
-import Resource from '../models/Resource';
-import ForumReply from '../models/ForumReply';
+
 
 // @desc    Get public user profile by ID
 // @route   GET /api/v1/users/public/:id
@@ -419,14 +419,19 @@ export const getAlumniDirectory = async (req: Request | any, res: Response): Pro
 export const transitionToAlumni = async (req: Request | any, res: Response): Promise<void> => {
     try {
         const user = await User.findById(req.user._id);
-        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        
+        if (!user) {
+            res.status(404).json({ success: false, message: "User not found" });
+            return; // 🚀 FIX: Return nothing (void) after sending the response
+        }
 
         user.isAlumni = true;
         user.currentPosition = req.body.currentPosition || "Seeking Opportunities";
         user.semester = "Graduated";
-        user.section = ""; // Remove section data
+        user.section = ""; 
         
         await user.save();
+        
         res.status(200).json({ success: true, message: "Welcome to the Alumni Network!", data: user });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { protect, authorizeRoles } from '../middlewares/authMiddleware';
+import { protect, authorizeRoles } from '../middleware/authMiddleware';
 import { 
     getPendingModeration, 
     moderateResource, 

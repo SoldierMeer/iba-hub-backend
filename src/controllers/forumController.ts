@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import ForumPost from '../models/ForumPost';
 import ForumReply from '../models/ForumReply';
-import { AuthRequest } from '../middlewares/authMiddleware';
+import { AuthRequest } from '../middleware/authMiddleware';
 import jwt from 'jsonwebtoken'; // Make sure this is imported at the top!
 import User from '../models/User';
 import Notification from '../models/Notification';

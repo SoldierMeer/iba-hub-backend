@@ -1,6 +1,6 @@
 import express from 'express';
-import { protect } from '../middlewares/authMiddleware';
-import { upload } from '../middlewares/uploadMiddleware';
+import { protect } from '../middleware/authMiddleware';
+import { upload } from '../middleware/uploadMiddleware';
 import { 
   uploadResource, 
   getResources, 

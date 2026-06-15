@@ -12,8 +12,8 @@ import {
     unblockUser,
     reportUser
 } from '../controllers/chatController';
-import { protect } from '../middlewares/authMiddleware';
-import { upload } from '../middlewares/uploadMiddleware';
+import { protect } from '../middleware/authMiddleware';
+import { upload } from '../middleware/uploadMiddleware';
 
 const router = express.Router();
 

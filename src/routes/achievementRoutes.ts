@@ -4,7 +4,7 @@ import {
   createAchievement, 
   toggleReaction 
 } from '../controllers/achievementController';
-import { protect } from '../middlewares/authMiddleware';
+import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
 

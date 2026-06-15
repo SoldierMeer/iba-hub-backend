@@ -8,7 +8,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import connectDB from './config/db';
 import cookieParser from 'cookie-parser';
-import { protect, authorizeRoles } from './middlewares/authMiddleware';
+import { protect, authorizeRoles } from './middleware/authMiddleware';
 
 // Route Imports
 import authRoutes from './routes/authRoutes';
