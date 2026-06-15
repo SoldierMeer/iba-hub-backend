@@ -138,7 +138,8 @@ app.use('/api', limiter);
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true, // Crucial for HttpOnly cookies
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 🚀 Added OPTIONS for preflight requests
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma'] // 🚀 THE CRITICAL FIX: Allows Bearer tokens
 }));
 
 // ==========================================
