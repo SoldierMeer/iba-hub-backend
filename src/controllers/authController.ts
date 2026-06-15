@@ -37,13 +37,15 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
     // If they checked the "I am an Alumni" box on the frontend:
     if (req.body.isAlumni) {
         if (!calculatedGradYear) {
-            return res.status(400).json({ success: false, message: "Could not verify graduation year from your email format." });
+            res.status(400).json({ success: false, message: "Could not verify graduation year from your email format." });
+            return;
         }
         if (calculatedGradYear > currentYear) {
-            return res.status(400).json({ 
+            res.status(400).json({ 
                 success: false, 
                 message: `Nice try! Your email indicates you graduate in ${calculatedGradYear}. You cannot register as an Alumni yet.` 
             });
+            return;
         }
     }
 
@@ -66,7 +68,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
 
     if (user) {
       // 3. Generate secure HttpOnly cookie token
-      generateToken(res, user._id as string);
+      generateToken(res, user._id as any);
 
       res.status(201).json({
         success: true,
@@ -98,7 +100,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
 
     // 2. Verify user exists and password matches
     if (user && (await user.matchPassword(password))) {
-      generateToken(res, user._id as string);
+      generateToken(res, user._id as any);
 
       res.status(200).json({
         success: true,

@@ -191,7 +191,7 @@ export const createComplaint = async (req: Request | any, res: Response): Promis
       const { title, description, category, department, mediaUrl, isAnonymous } = req.body;
       
       const newComplaint = await Complaint.create({
-        author: req.user._id,
+        author: req.user._id as any,
         title,
         description,
         category,
@@ -202,10 +202,10 @@ export const createComplaint = async (req: Request | any, res: Response): Promis
   
       await newComplaint.populate('author', 'firstName lastName avatarUrl headline');
   
-      const doc = newComplaint.toObject();
+      const doc: any = newComplaint.toObject(); // 👈 1. Cast doc as any
       if (doc.isAnonymous) {
         doc.author = {
-          _id: 'anonymous_id',
+          _id: 'anonymous_id' as any, // 👈 2. Bypass the ObjectId check
           firstName: 'Anonymous',
           lastName: 'Student',
           avatarUrl: '',
@@ -293,14 +293,14 @@ export const toggleUpvote = async (req: Request | any, res: Response): Promise<v
       // Atomic Pull: Safely removes the specific ID without touching the rest of the document
       updatedComplaint = await Complaint.findByIdAndUpdate(
           complaintId, 
-          { $pull: { upvotes: userId } },
+          { $pull: { upvotes: userId as any } },
           { new: true } // Tells Mongoose to return the newly updated document
       );
     } else {
       // Atomic Add: Safely adds the ID (only if it doesn't already exist)
       updatedComplaint = await Complaint.findByIdAndUpdate(
           complaintId, 
-          { $addToSet: { upvotes: userId } },
+          { $addToSet: { upvotes: userId as any } },
           { new: true }
       );
     }
@@ -335,7 +335,7 @@ export const addComment = async (req: Request | any, res: Response): Promise<voi
       }
   
       complaint.comments.push({
-        user: req.user._id,
+        user: req.user._id as any,
         text,
         createdAt: new Date()
       });
@@ -346,8 +346,8 @@ export const addComment = async (req: Request | any, res: Response): Promise<voi
     // Only notify if someone ELSE is commenting on the post
     if (complaint.author.toString() !== req.user._id.toString()) {
         const notification = await Notification.create({
-          recipient: complaint.author,
-          sender: req.user._id,
+          recipient: complaint.author as any,
+          sender: req.user._id as any,
           type: 'comment',
           content: `${req.user.firstName} commented on your post.`,
           link: '/voice'
@@ -390,8 +390,8 @@ export const updateComplaintStatus = async (req: Request | any, res: Response): 
       // --- REAL-TIME NOTIFICATION TRIGGER ---
     // Notify the student that their issue status was changed
     const notification = await Notification.create({
-        recipient: complaint.author,
-        sender: req.user._id,
+        recipient: complaint.author as any,
+        sender: req.user._id as any,
         type: 'status_change',
         content: `Your complaint status was updated to: ${status}`,
         link: '/voice'
@@ -446,7 +446,7 @@ export const toggleCommentLike = async (req: Request | any, res: Response): Prom
       if (upvoteIndex !== -1) {
         comment.upvotes.splice(upvoteIndex, 1); // Remove like
       } else {
-        comment.upvotes.push(req.user._id); // Add like
+        comment.upvotes.push(req.user._id as any); // Add like
       }
   
       await complaint.save();
