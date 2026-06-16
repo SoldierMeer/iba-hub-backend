@@ -126,7 +126,8 @@ app.use(mongoSanitize());
 // Rate limiting: 100 requests per 15 minutes per IP
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
-  max: process.env.NODE_ENV === 'development' ? 5000 : 100,
+  // 🚀 Increased the production limit from 100 to 1000 for testing
+  max: process.env.NODE_ENV === 'development' ? 5000 : 1000,
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api', limiter);
@@ -139,7 +140,7 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true, // Crucial for HttpOnly cookies
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 🚀 Added OPTIONS for preflight requests
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma'] // 🚀 THE CRITICAL FIX: Allows Bearer tokens
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Cache-Control', 'Pragma' , 'X-Requested-With'] // 🚀 THE CRITICAL FIX: Allows Bearer tokens
 }));
 
 // ==========================================
