@@ -252,6 +252,7 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
 // @desc    Get user's recent activity across the platform
 // @route   GET /api/v1/users/activity
 export const getUserActivity = async (req: Request | any, res: Response): Promise<Response> => {
+  console.log("Backend received query:", req.query);
   try {
     // 🚀 FIX: Get the target profile ID from query params instead of the logged-in user's ID
     const { userId } = req.query; 
