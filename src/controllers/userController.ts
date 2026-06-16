@@ -251,47 +251,51 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
 
 // @desc    Get user's recent activity across the platform
 // @route   GET /api/v1/users/activity
-export const getUserActivity = async (req: Request | any, res: Response): Promise<void> => {
-    try {
-      const userId = req.user._id;
-  
-      const resources = await Resource.find({ uploader: userId }).select('title createdAt').lean();
-      const replies = await ForumReply.find({ author: userId }).populate('post', 'title').select('createdAt isAcceptedAnswer post').lean();
-  
-      // 🏆 DYNAMICALLY CALCULATE REAL POINTS (Same math as Leaderboard!)
-      const totalPoints = (resources.length * 10) + 
-                          (replies.length * 5) + 
-                          (replies.filter(r => r.isAcceptedAnswer).length * 15);
+export const getUserActivity = async (req: Request | any, res: Response): Promise<Response> => {
+  try {
+    // 🚀 FIX: Get the target profile ID from query params instead of the logged-in user's ID
+    const { userId } = req.query; 
 
-      // Extract Activity & Assign Points based on the action
-      const activity = [
-        ...resources.map(r => ({ 
-           _id: r._id, 
-           type: 'Resource', 
-           title: r.title, 
-           date: r.createdAt, 
-           points: 10,
-           link: '/resources' 
-        })),
-        ...replies.map(r => ({ 
-           _id: r._id, 
-           type: r.isAcceptedAnswer ? 'Accepted Answer' : 'Reply', 
-           title: r.post ? `Reply on "${(r.post as any).title}"` : 'Forum Reply', 
-           date: r.createdAt, 
-           points: r.isAcceptedAnswer ? 20 : 5,
-           link: r.post ? `/forum/${(r.post as any)._id}` : '/forum'
-        }))
-      ];
-  
-      // Sort newest first
-      activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const recentActivity = activity.slice(0, 10);
-  
-      // Send totalPoints to the frontend!
-      res.status(200).json({ success: true, totalPoints, data: recentActivity });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID is required" });
     }
+
+    // Fetch resources and replies for the specific user requested
+    const resources = await Resource.find({ uploader: userId }).select('title createdAt').lean();
+    const replies = await ForumReply.find({ author: userId }).populate('post', 'title').select('createdAt isAcceptedAnswer post').lean();
+
+    // 🏆 Calculate points
+    const totalPoints = (resources.length * 10) + 
+                        (replies.length * 5) + 
+                        (replies.filter(r => r.isAcceptedAnswer).length * 15);
+
+    // Extract Activity
+    const activity = [
+      ...resources.map(r => ({ 
+          _id: r._id, 
+          type: 'Resource', 
+          title: r.title, 
+          date: r.createdAt, 
+          points: 10,
+          link: '/resources' 
+      })),
+      ...replies.map(r => ({ 
+          _id: r._id, 
+          type: r.isAcceptedAnswer ? 'Accepted Answer' : 'Reply', 
+          title: r.post ? `Reply on "${(r.post as any).title}"` : 'Forum Reply', 
+          date: r.createdAt, 
+          points: r.isAcceptedAnswer ? 20 : 5,
+          link: r.post ? `/forum/${(r.post as any)._id}` : '/forum'
+      }))
+    ];
+
+    activity.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const recentActivity = activity.slice(0, 10);
+
+    res.status(200).json({ success: true, totalPoints, data: recentActivity });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 

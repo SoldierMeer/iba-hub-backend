@@ -18,6 +18,7 @@ const router = express.Router();
 // ==========================================
 // This makes the full path: /api/v1/users/leaderboard
 router.get('/leaderboard', getLeaderboard); 
+router.get('/activity', getUserActivity);
 
 // 🚀 FIXED: Replaced 'protect' with 'optionalAuth' so guests don't get a 401 Error
 router.route('/public/:id').get(optionalAuth, getUserProfileById);
@@ -27,7 +28,7 @@ router.route('/public/:id').get(optionalAuth, getUserProfileById);
 // ==========================================
 router.get('/me', protect, getMe);
 router.route('/profile').put(protect, updateProfile);
-router.route('/activity').get(protect, getUserActivity);
+
 router.route('/alumni').get(protect, getAlumniDirectory);
 router.route('/become-alumni').put(protect, transitionToAlumni);
 router.put('/delay-graduation', protect, delayGraduation);
