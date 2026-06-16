@@ -25,6 +25,7 @@ export interface IUser extends Document {
   role: 'student' | 'moderator' | 'admin';
   contributorPoints: number;
   isOnline: boolean;
+  mutedUsers: string[];
   matchPassword(enteredPassword: string): Promise<boolean>;
 }
 

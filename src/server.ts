@@ -33,6 +33,7 @@ import ForumPost from './models/ForumPost'
 dotenv.config();
 
 const app: Application = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 
 const server = http.createServer(app);
@@ -41,7 +42,7 @@ const io = new Server(server, {
     origin: process.env.FRONTEND_URL || "http://localhost:3000", 
     methods: ["GET", "POST", 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Expires', 'Cache-Control', 'Pragma', 'X-Requested-With', 'Accept']
   }
 });
 
