@@ -78,6 +78,66 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
   }
 };
 
+
+// 1. SEND OTP FOR RESET
+export const sendPasswordResetOtp = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "No account found with this email." });
+    }
+
+    const transporter = getTransporter();
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await (Otp as any).findOneAndUpdate(
+      { email },
+      { otp: otpCode, createdAt: Date.now() },
+      { upsert: true, new: true }
+    );
+
+    // Reuse your existing transporter logic here
+    await transporter.sendMail({
+      from: `"IBA Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Reset your IBA Hub Password',
+      html: `<h2>Reset Code: ${otpCode}</h2>` // Customize your email template
+    });
+
+    res.status(200).json({ success: true, message: "OTP sent to your email." });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Error sending OTP." });
+  }
+};
+
+// 2. VERIFY OTP & UPDATE PASSWORD
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    const validOtp = await (Otp as any).findOne({ email, otp });
+    if (!validOtp) {
+      return res.status(400).json({ success: false, message: "Invalid or expired OTP." });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: "User not found." });
+
+    // IMPORTANT: Make sure your User model has a pre-save hook for hashing!
+    user.password = newPassword; 
+    await user.save();
+
+    await Otp.deleteOne({ email });
+
+    res.status(200).json({ success: true, message: "Password updated successfully!" });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: "Error resetting password." });
+  }
+};
 // @desc    Register a new user
 // @route   POST /api/v1/auth/register
 // @access  Public
