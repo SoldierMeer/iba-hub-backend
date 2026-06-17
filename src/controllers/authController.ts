@@ -7,7 +7,6 @@ import Otp from '../models/Otp';
 import nodemailer from 'nodemailer';
 
 
-
 const getTransporter = () => {
   return nodemailer.createTransport({
     service: 'gmail',
@@ -19,29 +18,33 @@ const getTransporter = () => {
 };
 
 // 1. SEND OTP ENDPOINT
-export const sendRegistrationOtp = async (req: Request, res: Response) => {
+export const sendRegistrationOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
 
     // 🚀 STRICT DOMAIN CHECK
     if (!email.endsWith('@iba-suk.edu.pk')) {
-      return res.status(403).json({ success: false, message: "Access denied. Only @iba-suk.edu.pk emails are allowed." });
+      res.status(403).json({ success: false, message: "Access denied. Only @iba-suk.edu.pk emails are allowed." });
+      return;
     }
 
     const studentEmailRegex = /^[a-zA-Z0-9]+\.(b|m)(f|s)[a-z]+\d{2}@iba-suk\.edu\.pk$/i;
 
     if (!studentEmailRegex.test(email)) {
-      return res.status(403).json({ 
+      res.status(403).json({ 
         success: false, 
         message: "Access restricted. Please use your valid student email (e.g., name.bsai23@iba-suk.edu.pk)." 
       });
+      return;
     }
 
     const transporter = getTransporter();
+    
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ success: false, message: "This email is already registered." });
+      res.status(400).json({ success: false, message: "This email is already registered." });
+      return;
     }
 
     // Generate 6-digit OTP
@@ -80,18 +83,18 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
 
 
 // 1. SEND OTP FOR RESET
-export const sendPasswordResetOtp = async (req: Request, res: Response) => {
+export const sendPasswordResetOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
     
     // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ success: false, message: "No account found with this email." });
+      res.status(404).json({ success: false, message: "No account found with this email." });
+      return;
     }
 
     const transporter = getTransporter();
-
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await (Otp as any).findOneAndUpdate(
@@ -100,12 +103,19 @@ export const sendPasswordResetOtp = async (req: Request, res: Response) => {
       { upsert: true, new: true }
     );
 
-    // Reuse your existing transporter logic here
     await transporter.sendMail({
       from: `"IBA Hub" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Reset your IBA Hub Password',
-      html: `<h2>Reset Code: ${otpCode}</h2>` // Customize your email template
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+          <h2 style="color: #0f172a;">Password Reset Request</h2>
+          <p style="color: #475569; font-size: 16px;">Use the verification code below to reset your password. This code will expire in 10 minutes.</p>
+          <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <h1 style="color: #dc2626; letter-spacing: 5px; margin: 0;">${otpCode}</h1>
+          </div>
+        </div>
+      `
     });
 
     res.status(200).json({ success: true, message: "OTP sent to your email." });
@@ -115,17 +125,21 @@ export const sendPasswordResetOtp = async (req: Request, res: Response) => {
 };
 
 // 2. VERIFY OTP & UPDATE PASSWORD
-export const resetPassword = async (req: Request, res: Response) => {
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp, newPassword } = req.body;
 
     const validOtp = await (Otp as any).findOne({ email, otp });
     if (!validOtp) {
-      return res.status(400).json({ success: false, message: "Invalid or expired OTP." });
+      res.status(400).json({ success: false, message: "Invalid or expired OTP." });
+      return;
     }
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ success: false, message: "User not found." });
+    if (!user) {
+        res.status(404).json({ success: false, message: "User not found." });
+        return;
+    }
 
     // IMPORTANT: Make sure your User model has a pre-save hook for hashing!
     user.password = newPassword; 
@@ -138,47 +152,44 @@ export const resetPassword = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "Error resetting password." });
   }
 };
+
 // @desc    Register a new user
 // @route   POST /api/v1/auth/register
 // @access  Public
-
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 🚀 1. Extract EVERYTHING from req.body (including OTP and alumni fields)
     const { 
       firstName, lastName, email, password, department, 
       semester, section, otp, isAlumni, currentPosition 
     } = req.body;
 
-    // 🚀 2. VERIFY OTP FIRST
+    // VERIFY OTP FIRST
     const validOtp = await (Otp as any).findOne({ email, otp });
     if (!validOtp) {
       res.status(400).json({ success: false, message: "Invalid or expired verification code." });
       return;
     }
 
-    // 3. Check if user already exists
     const userExists = await User.findOne({ email });
     if (userExists) {
       res.status(400).json({ success: false, message: 'User already exists with this email' });
       return;
     }
 
-    // 🚀 4. YOUR EXISTING IBA EMAIL PARSING LOGIC
+    // IBA EMAIL PARSING LOGIC
     const emailMatch = email.match(/\.([bm])[a-z]*(\d{2})@/i);
     let calculatedGradYear = null;
     let admissionYear = null;
 
     if (emailMatch) {
-        const degreeType = emailMatch[1].toLowerCase(); // 'b' for bachelors, 'm' for masters
-        const yearDigits = parseInt(emailMatch[2]); // e.g., 23
-        admissionYear = 2000 + yearDigits; // e.g., 2023
+        const degreeType = emailMatch[1].toLowerCase(); 
+        const yearDigits = parseInt(emailMatch[2]); 
+        admissionYear = 2000 + yearDigits; 
 
-        // Bachelors = 4 years, Masters = 2 years
         calculatedGradYear = degreeType === 'b' ? admissionYear + 4 : admissionYear + 2;
     }
 
-    const currentYear = new Date().getFullYear(); // Currently 2026
+    const currentYear = new Date().getFullYear();
 
     // Alumni Validation
     if (isAlumni) {
@@ -195,12 +206,11 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         }
     }
 
-    // 5. Create the user
     const user = await User.create({
       firstName,
       lastName,
       email,
-      password, // Assuming your User schema has a pre-save hook for hashing!
+      password,
       department,
       semester: isAlumni ? 'Graduated' : semester, 
       section: isAlumni ? '' : section, 
@@ -211,10 +221,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
     });
 
     if (user) {
-      // 🚀 6. CLEANUP: Delete the OTP so it cannot be reused
       await Otp.deleteOne({ email });
-
-      // 7. Generate secure HttpOnly cookie token
       generateToken(res, user._id as any);
 
       res.status(201).json({
@@ -235,7 +242,6 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ success: false, message: error.message || 'Server Error' });
   }
 };
-
 // @desc    Authenticate user & get token
 // @route   POST /api/v1/auth/login
 // @access  Public
