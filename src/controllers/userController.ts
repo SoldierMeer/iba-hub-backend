@@ -195,25 +195,25 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
   try {
     let { 
       bio, department, semester, section, currentPosition, 
-      about, skills, avatarUrl, bannerUrl, linkedin, instagram, github, portfolio // 🚀 ADDED PORTFOLIO
+      about, skills, avatarUrl, bannerUrl, linkedin, instagram, github, portfolio 
     } = req.body; 
 
     // 🚀 1. CLOUDINARY INTERCEPTOR FOR AVATAR
-    // If the frontend sent a Base64 string, upload it to Cloudinary first
     if (avatarUrl && avatarUrl.startsWith('data:image')) {
       const avatarUpload = await cloudinary.uploader.upload(avatarUrl, {
         folder: 'iba_hub_avatars',
-        transformation: [{ width: 400, height: 400, crop: 'thumb', gravity: 'face' }] 
+        // CHANGED: Just scale it down to 400px. No 'thumb', no 'face' gravity.
+        transformation: [{ width: 400, crop: 'scale' }] 
       });
       avatarUrl = avatarUpload.secure_url; 
     }
 
     // 🚀 2. CLOUDINARY INTERCEPTOR FOR BANNER
-    // If the frontend sent a Base64 string, upload it to Cloudinary first
     if (bannerUrl && bannerUrl.startsWith('data:image')) {
       const bannerUpload = await cloudinary.uploader.upload(bannerUrl, {
         folder: 'iba_hub_banners',
-        transformation: [{ width: 1200, height: 400, crop: 'fill' }]
+        // CHANGED: Just scale it down to 1200px width.
+        transformation: [{ width: 1200, crop: 'scale' }]
       });
       bannerUrl = bannerUpload.secure_url; 
     }
@@ -229,7 +229,7 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
       { 
         bio, department, semester, section, currentPosition, 
         about, skills: parsedSkills, avatarUrl, bannerUrl,
-        linkedin, instagram, github, portfolio // 🚀 ADDED PORTFOLIO
+        linkedin, instagram, github, portfolio 
       }, 
       { new: true, runValidators: true }
     ).select('-password');

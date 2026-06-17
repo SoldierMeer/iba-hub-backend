@@ -4,47 +4,34 @@ import generateToken from '../utils/generateToken';
 import { AuthRequest } from '../middleware/authMiddleware';
 import jwt from 'jsonwebtoken';
 import Otp from '../models/Otp';
-import nodemailer from 'nodemailer';
 
-
-const getTransporter = () => {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD,
-    },
-  });
-};
-
-// 1. SEND OTP ENDPOINT
-export const sendRegistrationOtp = async (req: Request, res: Response): Promise<void> => {
+// 1. SEND OTP ENDPOINT (REGISTRATION)
+export const sendRegistrationOtp = async (req: Request, res: Response) => {
+  console.log("Checking for API Key:", process.env.BREVO_API_KEY ? "KEY FOUND!" : "KEY IS MISSING!");
   try {
     const { email } = req.body;
 
     // 🚀 STRICT DOMAIN CHECK
     if (!email.endsWith('@iba-suk.edu.pk')) {
-      res.status(403).json({ success: false, message: "Access denied. Only @iba-suk.edu.pk emails are allowed." });
-      return;
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access denied. Only @iba-suk.edu.pk emails are allowed." 
+      });
     }
 
     const studentEmailRegex = /^[a-zA-Z0-9]+\.(b|m)(f|s)[a-z]+\d{2}@iba-suk\.edu\.pk$/i;
 
     if (!studentEmailRegex.test(email)) {
-      res.status(403).json({ 
+      return res.status(403).json({ 
         success: false, 
         message: "Access restricted. Please use your valid student email (e.g., name.bsai23@iba-suk.edu.pk)." 
       });
-      return;
     }
 
-    const transporter = getTransporter();
-    
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      res.status(400).json({ success: false, message: "This email is already registered." });
-      return;
+      return res.status(400).json({ success: false, message: "This email is already registered." });
     }
 
     // Generate 6-digit OTP
@@ -54,35 +41,53 @@ export const sendRegistrationOtp = async (req: Request, res: Response): Promise<
     await (Otp as any).findOneAndUpdate(
       { email },
       { otp: otpCode, createdAt: Date.now() },
-      { upsert: true, new: true, setDefaultsOnInsert: true}
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // Send Email
-    await transporter.sendMail({
-      from: `"IBA Hub" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Verify your IBA Hub Account',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
-          <h2 style="color: #0f172a;">Welcome to IBA Hub!</h2>
-          <p style="color: #475569; font-size: 16px;">Use the verification code below to complete your registration. This code will expire in 10 minutes.</p>
-          <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
-            <h1 style="color: #4f46e5; letter-spacing: 5px; margin: 0;">${otpCode}</h1>
+    // 🚀 BREVO HTTP API CALL
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': process.env.BREVO_API_KEY as string
+      },
+      body: JSON.stringify({
+        sender: { name: "IBA Hub", email: process.env.EMAIL_USER }, 
+        to: [{ email: email }],
+        subject: 'Verify your IBA Hub Account',
+        htmlContent: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <h2 style="color: #0f172a;">Welcome to IBA Hub!</h2>
+            <p style="color: #475569; font-size: 16px;">Use the verification code below to complete your registration. This code will expire in 10 minutes.</p>
+            <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+              <h1 style="color: #4f46e5; letter-spacing: 5px; margin: 0;">${otpCode}</h1>
+            </div>
+            <p style="color: #94a3b8; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
           </div>
-          <p style="color: #94a3b8; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
-        </div>
-      `,
+        `,
+      }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Brevo API Error Response:", errorData);
+      throw new Error(errorData.message || "Failed to send email via Brevo API");
+    }
 
     res.status(200).json({ success: true, message: "OTP sent successfully." });
   } catch (error: any) {
     console.error("OTP Error Details:", error);
-    res.status(500).json({ success: false, message: "Failed to send OTP." , details: error.message});
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to send OTP.", 
+      details: error.message 
+    });
   }
 };
 
 
-// 1. SEND OTP FOR RESET
+// 2. SEND OTP FOR RESET
 export const sendPasswordResetOtp = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
@@ -94,7 +99,6 @@ export const sendPasswordResetOtp = async (req: Request, res: Response): Promise
       return;
     }
 
-    const transporter = getTransporter();
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     await (Otp as any).findOneAndUpdate(
@@ -103,28 +107,44 @@ export const sendPasswordResetOtp = async (req: Request, res: Response): Promise
       { upsert: true, new: true }
     );
 
-    await transporter.sendMail({
-      from: `"IBA Hub" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Reset your IBA Hub Password',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
-          <h2 style="color: #0f172a;">Password Reset Request</h2>
-          <p style="color: #475569; font-size: 16px;">Use the verification code below to reset your password. This code will expire in 10 minutes.</p>
-          <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
-            <h1 style="color: #dc2626; letter-spacing: 5px; margin: 0;">${otpCode}</h1>
+    // 🚀 BREVO HTTP API CALL (Replaced Nodemailer!)
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': process.env.BREVO_API_KEY as string
+      },
+      body: JSON.stringify({
+        sender: { name: "IBA Hub", email: process.env.EMAIL_USER }, 
+        to: [{ email: email }],
+        subject: 'Reset your IBA Hub Password',
+        htmlContent: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <h2 style="color: #0f172a;">Password Reset Request</h2>
+            <p style="color: #475569; font-size: 16px;">Use the verification code below to reset your password. This code will expire in 10 minutes.</p>
+            <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+              <h1 style="color: #dc2626; letter-spacing: 5px; margin: 0;">${otpCode}</h1>
+            </div>
           </div>
-        </div>
-      `
+        `
+      })
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Brevo API Error Response:", errorData);
+      throw new Error(errorData.message || "Failed to send email via Brevo API");
+    }
 
     res.status(200).json({ success: true, message: "OTP sent to your email." });
   } catch (error: any) {
+    console.error("Password Reset OTP Error Details:", error);
     res.status(500).json({ success: false, message: "Error sending OTP." });
   }
 };
 
-// 2. VERIFY OTP & UPDATE PASSWORD
+// 3. VERIFY OTP & UPDATE PASSWORD
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -153,9 +173,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// @desc    Register a new user
-// @route   POST /api/v1/auth/register
-// @access  Public
+// 4. REGISTER A NEW USER
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { 
