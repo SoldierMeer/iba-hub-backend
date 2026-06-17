@@ -13,15 +13,17 @@ export interface IUser extends Document {
   batch?: string;
   currentPosition?: string;
   email: string;
-  password?: string; // Optional because OAuth users might not have one
+  password?: string; 
   department: string;
   semester: string;
   section: string;
   connections?: mongoose.Types.ObjectId[];
   avatarUrl: string;
   bannerUrl?: string;
-  linkedin?: string; // 🚀 ADDED LINKEDIN
-  instagram?: string; // 🚀 ADDED INSTAGRAM
+  linkedin?: string; 
+  instagram?: string; 
+  github?: string;
+  portfolio?: string; // 🚀 ADDED PORTFOLIO
   role: 'student' | 'moderator' | 'admin';
   contributorPoints: number;
   isOnline: boolean;
@@ -125,6 +127,10 @@ const UserSchema: Schema = new Schema(
         default: '',
     },
     github: {           // 🚀 ADD GITHUB HERE
+      type: String,
+      default: '',
+    },
+    portfolio: {        // 🚀 ADDED PORTFOLIO
       type: String,
       default: '',
     },

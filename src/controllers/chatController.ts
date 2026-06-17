@@ -4,6 +4,7 @@ import Message from '../models/Message';
 import Notification from '../models/Notification';
 import Connection from '../models/Connection'; 
 import Report from '../models/Report';
+import { v2 as cloudinary } from 'cloudinary'; 
 
 
 // @desc    Get all users for the Smart Directory (with search/filters & connection status)
@@ -274,33 +275,73 @@ export const getChatHistory = async (req: Request | any, res: Response): Promise
 
 // @desc    Save a message to the database
 // @route   POST /api/v1/chat/messages
-export const sendMessage = async (req: Request | any, res: Response): Promise<void> => {
-    try {
-      const { receiverId, text, mediaUrl } = req.body;
+// export const sendMessage = async (req: Request | any, res: Response): Promise<void> => {
+//     try {
+//       const { receiverId, text, mediaUrl } = req.body;
   
-      const message = await Message.create({
-        sender: req.user._id,
-        receiver: receiverId,
-        text: text || '', 
-        mediaUrl: mediaUrl || '' 
-      });
+//       const message = await Message.create({
+//         sender: req.user._id,
+//         receiver: receiverId,
+//         text: text || '', 
+//         mediaUrl: mediaUrl || '' 
+//       });
 
-      const notification = await Notification.create({
-        recipient: receiverId, 
-        sender: req.user._id,
-        type: 'message',
-        content: `${req.user.firstName} sent you a new message.`,
-        link: `/chat?userId=${req.user._id}` 
+//       const notification = await Notification.create({
+//         recipient: receiverId, 
+//         sender: req.user._id,
+//         type: 'message',
+//         content: `${req.user.firstName} sent you a new message.`,
+//         link: `/chat?userId=${req.user._id}` 
+//       });
+  
+//       const io = req.app.get('io');
+//       io.to(receiverId.toString()).emit('new_notification', notification);
+  
+//       res.status(201).json({ success: true, data: message });
+//     } catch (error: any) {
+//       console.error("🔥 CRASH IN SEND_MESSAGE:", error);
+//       res.status(500).json({ success: false, message: error.message });
+//     }
+// };
+
+export const sendMessage = async (req: Request | any, res: Response): Promise<void> => {
+  try {
+    const { receiverId, text, mediaUrl } = req.body;
+    let finalMediaUrl = '';
+
+    // 🚀 NEW: Check if mediaUrl exists and is a base64 string
+    if (mediaUrl && mediaUrl.startsWith('data:image')) {
+      const uploadResponse = await cloudinary.uploader.upload(mediaUrl, {
+        folder: 'chat_media',
+        resource_type: 'image',
+        transformation: [{ width: 800, quality: 'auto', fetch_format: 'auto' }] // 🚀 Optimization here
       });
-  
-      const io = req.app.get('io');
-      io.to(receiverId.toString()).emit('new_notification', notification);
-  
-      res.status(201).json({ success: true, data: message });
-    } catch (error: any) {
-      console.error("🔥 CRASH IN SEND_MESSAGE:", error);
-      res.status(500).json({ success: false, message: error.message });
+      finalMediaUrl = uploadResponse.secure_url; // Use the URL from Cloudinary
     }
+
+    const message = await Message.create({
+      sender: req.user._id,
+      receiver: receiverId,
+      text: text || '', 
+      mediaUrl: finalMediaUrl // Save the URL, not the Base64 string!
+    });
+
+    const notification = await Notification.create({
+      recipient: receiverId, 
+      sender: req.user._id,
+      type: 'message',
+      content: `${req.user.firstName} sent you a new message.`,
+      link: `/chat?userId=${req.user._id}` 
+    });
+
+    const io = req.app.get('io');
+    io.to(receiverId.toString()).emit('new_notification', notification);
+    
+    res.status(201).json({ success: true, data: message });
+  } catch (error: any) {
+    console.error("🔥 CRASH IN SEND_MESSAGE:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 // 🚀 Add this new function to get recent chat history

@@ -3,24 +3,109 @@ import User from '../models/User';
 import generateToken from '../utils/generateToken';
 import { AuthRequest } from '../middleware/authMiddleware';
 import jwt from 'jsonwebtoken';
+import Otp from '../models/Otp';
+import nodemailer from 'nodemailer';
+
+
+
+const getTransporter = () => {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_APP_PASSWORD,
+    },
+  });
+};
+
+// 1. SEND OTP ENDPOINT
+export const sendRegistrationOtp = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    // 🚀 STRICT DOMAIN CHECK
+    if (!email.endsWith('@iba-suk.edu.pk')) {
+      return res.status(403).json({ success: false, message: "Access denied. Only @iba-suk.edu.pk emails are allowed." });
+    }
+
+    const studentEmailRegex = /^[a-zA-Z0-9]+\.(b|m)(f|s)[a-z]+\d{2}@iba-suk\.edu\.pk$/i;
+
+    if (!studentEmailRegex.test(email)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Access restricted. Please use your valid student email (e.g., name.bsai23@iba-suk.edu.pk)." 
+      });
+    }
+
+    const transporter = getTransporter();
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "This email is already registered." });
+    }
+
+    // Generate 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Save to DB (Update if one already exists for this email)
+    await (Otp as any).findOneAndUpdate(
+      { email },
+      { otp: otpCode, createdAt: Date.now() },
+      { upsert: true, new: true, setDefaultsOnInsert: true}
+    );
+
+    // Send Email
+    await transporter.sendMail({
+      from: `"IBA Hub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Verify your IBA Hub Account',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
+          <h2 style="color: #0f172a;">Welcome to IBA Hub!</h2>
+          <p style="color: #475569; font-size: 16px;">Use the verification code below to complete your registration. This code will expire in 10 minutes.</p>
+          <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+            <h1 style="color: #4f46e5; letter-spacing: 5px; margin: 0;">${otpCode}</h1>
+          </div>
+          <p style="color: #94a3b8; font-size: 12px;">If you didn't request this, you can safely ignore this email.</p>
+        </div>
+      `,
+    });
+
+    res.status(200).json({ success: true, message: "OTP sent successfully." });
+  } catch (error: any) {
+    console.error("OTP Error Details:", error);
+    res.status(500).json({ success: false, message: "Failed to send OTP." , details: error.message});
+  }
+};
 
 // @desc    Register a new user
 // @route   POST /api/v1/auth/register
 // @access  Public
+
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 🚀 THE FIX: Added 'section' to the destructuring right here!
-    const { firstName, lastName, email, password, department, semester, section } = req.body;
+    // 🚀 1. Extract EVERYTHING from req.body (including OTP and alumni fields)
+    const { 
+      firstName, lastName, email, password, department, 
+      semester, section, otp, isAlumni, currentPosition 
+    } = req.body;
 
-    // 1. Check if user already exists
+    // 🚀 2. VERIFY OTP FIRST
+    const validOtp = await (Otp as any).findOne({ email, otp });
+    if (!validOtp) {
+      res.status(400).json({ success: false, message: "Invalid or expired verification code." });
+      return;
+    }
+
+    // 3. Check if user already exists
     const userExists = await User.findOne({ email });
     if (userExists) {
       res.status(400).json({ success: false, message: 'User already exists with this email' });
       return;
     }
 
+    // 🚀 4. YOUR EXISTING IBA EMAIL PARSING LOGIC
     const emailMatch = email.match(/\.([bm])[a-z]*(\d{2})@/i);
-    
     let calculatedGradYear = null;
     let admissionYear = null;
 
@@ -35,8 +120,8 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
 
     const currentYear = new Date().getFullYear(); // Currently 2026
 
-    // If they checked the "I am an Alumni" box on the frontend:
-    if (req.body.isAlumni) {
+    // Alumni Validation
+    if (isAlumni) {
         if (!calculatedGradYear) {
             res.status(400).json({ success: false, message: "Could not verify graduation year from your email format." });
             return;
@@ -50,29 +135,31 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         }
     }
 
-    // 2. Create the user
+    // 5. Create the user
     const user = await User.create({
       firstName,
       lastName,
       email,
-      password,
+      password, // Assuming your User schema has a pre-save hook for hashing!
       department,
-      semester: req.body.isAlumni ? 'Graduated' : semester, // Alumni don't need semesters
-      section: req.body.isAlumni ? '' : section, // 🚀 This now works because section is defined!
-      
-      // Save the Alumni data
-      isAlumni: req.body.isAlumni || false,
+      semester: isAlumni ? 'Graduated' : semester, 
+      section: isAlumni ? '' : section, 
+      isAlumni: isAlumni || false,
       graduationYear: calculatedGradYear,
       batch: admissionYear ? admissionYear.toString() : '',
-      currentPosition: req.body.currentPosition || '',
+      currentPosition: currentPosition || '',
     });
 
     if (user) {
-      // 3. Generate secure HttpOnly cookie token
+      // 🚀 6. CLEANUP: Delete the OTP so it cannot be reused
+      await Otp.deleteOne({ email });
+
+      // 7. Generate secure HttpOnly cookie token
       generateToken(res, user._id as any);
 
       res.status(201).json({
         success: true,
+        message: "Registration complete! Welcome to IBA Hub.",
         data: {
           _id: user._id,
           firstName: user.firstName,

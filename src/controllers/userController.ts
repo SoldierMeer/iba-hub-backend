@@ -193,10 +193,9 @@ export const getMe = async (req: Request | any, res: Response): Promise<void> =>
 
 export const updateProfile = async (req: Request | any, res: Response): Promise<void> => {
   try {
-    // 🚀 Changed from 'const' to 'let' so we can overwrite the Base64 strings with Cloudinary URLs
     let { 
       bio, department, semester, section, currentPosition, 
-      about, skills, avatarUrl, bannerUrl, linkedin, instagram, github 
+      about, skills, avatarUrl, bannerUrl, linkedin, instagram, github, portfolio // 🚀 ADDED PORTFOLIO
     } = req.body; 
 
     // 🚀 1. CLOUDINARY INTERCEPTOR FOR AVATAR
@@ -204,9 +203,9 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
     if (avatarUrl && avatarUrl.startsWith('data:image')) {
       const avatarUpload = await cloudinary.uploader.upload(avatarUrl, {
         folder: 'iba_hub_avatars',
-        transformation: [{ width: 400, height: 400, crop: 'thumb', gravity: 'face' }] // Auto-crops to the face
+        transformation: [{ width: 400, height: 400, crop: 'thumb', gravity: 'face' }] 
       });
-      avatarUrl = avatarUpload.secure_url; // Replace Base64 string with the clean URL
+      avatarUrl = avatarUpload.secure_url; 
     }
 
     // 🚀 2. CLOUDINARY INTERCEPTOR FOR BANNER
@@ -216,7 +215,7 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
         folder: 'iba_hub_banners',
         transformation: [{ width: 1200, height: 400, crop: 'fill' }]
       });
-      bannerUrl = bannerUpload.secure_url; // Replace Base64 string with the clean URL
+      bannerUrl = bannerUpload.secure_url; 
     }
 
     // 3. Process skills exactly as you had it
@@ -230,7 +229,7 @@ export const updateProfile = async (req: Request | any, res: Response): Promise<
       { 
         bio, department, semester, section, currentPosition, 
         about, skills: parsedSkills, avatarUrl, bannerUrl,
-        linkedin, instagram, github 
+        linkedin, instagram, github, portfolio // 🚀 ADDED PORTFOLIO
       }, 
       { new: true, runValidators: true }
     ).select('-password');
@@ -331,6 +330,10 @@ export const getUserProfileById = async (req: Request | any, res: Response): Pro
                 }
             }
         }
+        const connectionCount = await Connection.countDocuments({
+          $or: [{ sender: user._id }, { receiver: user._id }],
+          status: 'accepted'
+      });
 
         const resources = await Resource.find({ uploader: user._id }).select('title createdAt').lean();
         const replies = await ForumReply.find({ author: user._id }).populate('post', 'title').select('createdAt isAcceptedAnswer post').lean();
@@ -349,7 +352,8 @@ export const getUserProfileById = async (req: Request | any, res: Response): Pro
             data: user, 
             totalPoints, 
             activity: activity.slice(0, 10),
-            connectionStatus // 👈 Sending this to the frontend!
+            connectionStatus ,
+            connectionCount // 👈 Sending this to the frontend!
         });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });

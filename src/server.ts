@@ -1,9 +1,9 @@
+import dotenv from 'dotenv';
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import http from 'http';
 import { Server } from 'socket.io';
 import connectDB from './config/db';
