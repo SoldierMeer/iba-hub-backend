@@ -9,7 +9,8 @@ import Otp from '../models/Otp';
 export const sendRegistrationOtp = async (req: Request, res: Response) => {
   console.log("Checking for API Key:", process.env.BREVO_API_KEY ? "KEY FOUND!" : "KEY IS MISSING!");
   try {
-    const { email } = req.body;
+    // 🚀 Extract isAlumni from the request body as well
+    const { email, isAlumni } = req.body;
 
     // 🚀 STRICT DOMAIN CHECK
     if (!email.endsWith('@iba-suk.edu.pk')) {
@@ -34,6 +35,28 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "This email is already registered." });
     }
 
+    // 🚀 THE ALUMNI PRE-CHECK (Saves Brevo credits & gives instant feedback)
+    if (isAlumni) {
+      const emailMatch = email.match(/\.([bm])[a-z]*(\d{2})@/i);
+      
+      if (!emailMatch) {
+        return res.status(400).json({ success: false, message: "Could not verify graduation year from your email format." });
+      }
+
+      const degreeType = emailMatch[1].toLowerCase(); 
+      const yearDigits = parseInt(emailMatch[2]); 
+      const admissionYear = 2000 + yearDigits; 
+      const calculatedGradYear = degreeType === 'b' ? admissionYear + 4 : admissionYear + 2;
+      const currentYear = new Date().getFullYear();
+
+      if (calculatedGradYear > currentYear) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Nice try! Your email indicates you graduate in ${calculatedGradYear}. You cannot register as an Alumni yet.` 
+        }); // 🛑 execution stops here, no email is sent!
+      }
+    }
+
     // Generate 6-digit OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -41,7 +64,7 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
     await (Otp as any).findOneAndUpdate(
       { email },
       { otp: otpCode, createdAt: Date.now() },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
     );
 
     // 🚀 BREVO HTTP API CALL
@@ -85,7 +108,6 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 // 2. SEND OTP FOR RESET
 export const sendPasswordResetOtp = async (req: Request, res: Response): Promise<void> => {
