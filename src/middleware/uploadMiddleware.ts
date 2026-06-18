@@ -13,19 +13,13 @@ cloudinary.config({
 });
 
 // 2. Configure the Storage Engine (NOW DYNAMIC!)
+// 2. Configure the Storage Engine (NOW DYNAMIC & DOCUMENT-SAFE!)
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req: any, file: any) => {
-    // Determine the file format based on mimetype
-    let format = 'raw'; 
-    if (file.mimetype.startsWith('image/')) {
-      format = file.mimetype.split('/')[1]; 
-    }
-
     let targetFolder = 'iba_hub_general'; 
 
     // 🚀 DYNAMIC ROUTING LOGIC
-    // req.originalUrl looks at the full path (e.g., /api/v1/users/report)
     const url = req.originalUrl || req.baseUrl || '';
 
     if (url.includes('resources')) {
@@ -33,23 +27,28 @@ const storage = new CloudinaryStorage({
     } else if (url.includes('complaints')) {
       targetFolder = 'iba_hub_complaints_evidence';
     } else if (url.includes('report')) { 
-      // 👈 NEW: Catches User Report evidence from the chat module
       targetFolder = 'iba_hub_user_reports';
     } else if (url.includes('users') || url.includes('profile')) {
       targetFolder = 'iba_hub_profiles';
     } else if (url.includes('chat') || url.includes('message')) {
-      // 👈 NEW: Future-proofing for direct chat image attachments
       targetFolder = 'iba_hub_chat_attachments';
     }
 
-    return {
-      folder: targetFolder, 
-      format: format,
+    // Base parameters that work for ALL files
+    const params: any = {
+      folder: targetFolder,
       resource_type: 'auto', 
     };
+
+    // 🚀 FIXED: Only force a specific format if it is actually an image.
+    // If it is a PDF or Document, we don't pass the "format" parameter at all.
+    if (file.mimetype.startsWith('image/')) {
+      params.format = file.mimetype.split('/')[1]; 
+    }
+
+    return params;
   },
 });
-
 // 3. Create the Multer upload instance
 export const upload = multer({ 
   storage: storage,
