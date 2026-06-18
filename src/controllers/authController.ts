@@ -6,10 +6,9 @@ import jwt from 'jsonwebtoken';
 import Otp from '../models/Otp';
 
 // 1. SEND OTP ENDPOINT (REGISTRATION)
+
 export const sendRegistrationOtp = async (req: Request, res: Response) => {
-  console.log("Checking for API Key:", process.env.BREVO_API_KEY ? "KEY FOUND!" : "KEY IS MISSING!");
   try {
-    // 🚀 Extract isAlumni from the request body as well
     const { email, isAlumni } = req.body;
 
     // 🚀 STRICT DOMAIN CHECK
@@ -20,12 +19,19 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
       });
     }
 
-    const studentEmailRegex = /^[a-zA-Z0-9]+\.(b|m)(f|s)[a-z]+\d{2}@iba-suk\.edu\.pk$/i;
+    // 🚀 THE ULTIMATE IBA EMAIL REGEX
+    // Breakdown: 
+    // ^[a-zA-Z0-9_.-]+  -> Matches any name, including dots and underscores (e.g., shakirali_mashooq)
+    // \.([a-z]+)        -> Group 1: Matches the degree & optional pre-campus code (bba, bscsmpk, msmgt)
+    // ([fs])            -> Group 2: The Season (f or s)
+    // (\d{2,3})         -> Group 3: The Year (23, 24, or even 217)
+    // [a-z]*            -> Skips any post-year campus codes (khp, mks)
+    const emailMatch = email.match(/^[a-zA-Z0-9_.-]+\.([a-z]+)([fs])(\d{2,3})[a-z]*@iba-suk\.edu\.pk$/i);
 
-    if (!studentEmailRegex.test(email)) {
+    if (!emailMatch) {
       return res.status(403).json({ 
         success: false, 
-        message: "Access restricted. Please use your valid student email (e.g., name.bsai23@iba-suk.edu.pk)." 
+        message: "Access restricted. Please use your valid student email (e.g., name.bscsf23@iba-suk.edu.pk)." 
       });
     }
 
@@ -35,20 +41,20 @@ export const sendRegistrationOtp = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "This email is already registered." });
     }
 
+    // Extract Data for Validation
+    const degreeType = emailMatch[1].toLowerCase(); 
+    const yearDigits = parseInt(emailMatch[3]); 
+    // Safely handle weird edge cases like '217' by converting to 17 -> 2017
+    const admissionYear = 2000 + (yearDigits % 100); 
+    
+    // 🚀 DYNAMIC DURATION LOGIC
+    // If the degree starts with 'm' (MS, MBA, MPhil) or 'p' (PhD), duration is 2 years. Else 4.
+    const duration = (degreeType.startsWith('m') || degreeType.startsWith('p')) ? 2 : 4;
+    const calculatedGradYear = admissionYear + duration;
+    const currentYear = new Date().getFullYear();
+
     // 🚀 THE ALUMNI PRE-CHECK (Saves Brevo credits & gives instant feedback)
     if (isAlumni) {
-      const emailMatch = email.match(/\.([bm])[a-z]*(\d{2})@/i);
-      
-      if (!emailMatch) {
-        return res.status(400).json({ success: false, message: "Could not verify graduation year from your email format." });
-      }
-
-      const degreeType = emailMatch[1].toLowerCase(); 
-      const yearDigits = parseInt(emailMatch[2]); 
-      const admissionYear = 2000 + yearDigits; 
-      const calculatedGradYear = degreeType === 'b' ? admissionYear + 4 : admissionYear + 2;
-      const currentYear = new Date().getFullYear();
-
       if (calculatedGradYear > currentYear) {
         return res.status(400).json({ 
           success: false, 
@@ -196,6 +202,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 };
 
 // 4. REGISTER A NEW USER
+
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { 
@@ -216,17 +223,18 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // IBA EMAIL PARSING LOGIC
-    const emailMatch = email.match(/\.([bm])[a-z]*(\d{2})@/i);
+    // THE ULTIMATE IBA EMAIL REGEX (Same as OTP step)
+    const emailMatch = email.match(/^[a-zA-Z0-9_.-]+\.([a-z]+)([fs])(\d{2,3})[a-z]*@iba-suk\.edu\.pk$/i);
     let calculatedGradYear = null;
     let admissionYear = null;
 
     if (emailMatch) {
         const degreeType = emailMatch[1].toLowerCase(); 
-        const yearDigits = parseInt(emailMatch[2]); 
-        admissionYear = 2000 + yearDigits; 
+        const yearDigits = parseInt(emailMatch[3]); 
+        admissionYear = 2000 + (yearDigits % 100); 
 
-        calculatedGradYear = degreeType === 'b' ? admissionYear + 4 : admissionYear + 2;
+        const duration = (degreeType.startsWith('m') || degreeType.startsWith('p')) ? 2 : 4;
+        calculatedGradYear = admissionYear + duration;
     }
 
     const currentYear = new Date().getFullYear();
@@ -282,6 +290,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ success: false, message: error.message || 'Server Error' });
   }
 };
+
 // @desc    Authenticate user & get token
 // @route   POST /api/v1/auth/login
 // @access  Public

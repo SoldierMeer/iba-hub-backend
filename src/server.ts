@@ -49,18 +49,73 @@ const io = new Server(server, {
 // THIS PREVENTS THE 500 ERROR IN YOUR CONTROLLERS!
 app.set('io', io);
 
+// io.on('connection', (socket) => {
+//   console.log(`🟢 Real-time Socket connected: ${socket.id}`);
+
+//   // 1. User logs in and joins their own personal room
+//   socket.on('setup_user', async (userId) => {
+//     (socket as any).userId = userId; // Attach userId to the socket for disconnect handling
+//     socket.join(userId);
+    
+//     try {
+//       // Turn user ONLINE in MongoDB
+//       await User.findByIdAndUpdate(userId, { isOnline: true });
+//       console.log(`👤 User ID: ${userId} is now ONLINE in database`);
+//     } catch (error) {
+//       console.error("Failed to update online status", error);
+//     }
+    
+//     socket.emit('connected');
+//   });
+
+//   // 2. Routing the message to the specific receiver
+//   socket.on('send_message', (messageData) => {
+//     const receiverId = messageData.receiver;
+//     // Broadcast the message ONLY to the receiver's room
+//     socket.to(receiverId).emit('receive_message', messageData);
+//   });
+
+//   // 3. Typing indicators
+//   socket.on('typing', (data) => socket.to(data.receiverId).emit('typing', data.senderId));
+//   socket.on('stop_typing', (data) => socket.to(data.receiverId).emit('stop_typing', data.senderId));
+
+//   // 4. Handle Disconnects (Turn user offline!)
+//   socket.on('disconnect', async () => {
+//     const userId = (socket as any).userId;
+    
+//     if (userId) {
+//       try {
+//         // Turn user OFFLINE in MongoDB
+//         await User.findByIdAndUpdate(userId, { isOnline: false });
+//         console.log(`🔴 User ID: ${userId} went OFFLINE in database`);
+//       } catch (error) {
+//         console.error("Failed to update offline status", error);
+//       }
+//     }
+//     console.log(`🔴 Socket disconnected: ${socket.id}`);
+//   });
+// });
+
+// ==========================================
+// 1. ENTERPRISE SECURITY MIDDLEWARE & PARSERS
+// ==========================================
+// Set security HTTP headers
+
 io.on('connection', (socket) => {
   console.log(`🟢 Real-time Socket connected: ${socket.id}`);
 
   // 1. User logs in and joins their own personal room
   socket.on('setup_user', async (userId) => {
-    (socket as any).userId = userId; // Attach userId to the socket for disconnect handling
+    (socket as any).userId = userId; 
     socket.join(userId);
     
     try {
       // Turn user ONLINE in MongoDB
       await User.findByIdAndUpdate(userId, { isOnline: true });
       console.log(`👤 User ID: ${userId} is now ONLINE in database`);
+      
+      // 🚀 BROADCAST: Notify everyone connected that this user is now online
+      io.emit('user_status_change', { userId, isOnline: true });
     } catch (error) {
       console.error("Failed to update online status", error);
     }
@@ -88,6 +143,9 @@ io.on('connection', (socket) => {
         // Turn user OFFLINE in MongoDB
         await User.findByIdAndUpdate(userId, { isOnline: false });
         console.log(`🔴 User ID: ${userId} went OFFLINE in database`);
+        
+        // 🚀 BROADCAST: Notify everyone connected that this user is now offline
+        io.emit('user_status_change', { userId, isOnline: false });
       } catch (error) {
         console.error("Failed to update offline status", error);
       }
@@ -96,10 +154,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// ==========================================
-// 1. ENTERPRISE SECURITY MIDDLEWARE & PARSERS
-// ==========================================
-// Set security HTTP headers
 app.use(helmet());
 
 // Body parser (CRITICAL: MUST BE BEFORE SANITIZATION)
@@ -128,7 +182,7 @@ app.use(mongoSanitize());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   // 🚀 Increased the production limit from 100 to 1000 for testing
-  max: process.env.NODE_ENV === 'development' ? 5000 : 1000,
+  max: process.env.NODE_ENV === 'development' ? 5000 : 10000,
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api', limiter);

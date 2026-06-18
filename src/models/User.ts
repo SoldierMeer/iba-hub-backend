@@ -91,7 +91,17 @@ const UserSchema: Schema = new Schema(
     department: {
       type: String,
       required: [true, 'Department is required'],
-      enum: ['Computer Science', 'Software Engineering', 'BBA', 'Accounting & Finance', 'Mathematics', 'Other'],
+      enum: [
+        'Computer Science', 
+        'Business Administration', 
+        'Computer Systems Engineering', 
+        'Electrical Engineering', 
+        'Mathematics', 
+        'Education', 
+        'Media & Communications', 
+        'Physical Education', 
+        'Other'
+      ],
       default: 'Computer Science',
     },
     semester: {
