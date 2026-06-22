@@ -33,86 +33,94 @@ const getUserIdFromRequest = (req: any): string | null => {
 
 // @desc    Get Global Leaderboard
 // @route   GET /api/v1/users/leaderboard
-export const getLeaderboard = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { filter } = req.query;
-      let dateMatch: any = {};
 
-      // 1. Time Filters
-      if (filter === 'this_week') {
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        dateMatch = { createdAt: { $gte: oneWeekAgo } };
-      } else if (filter === 'monthly') {
-        const oneMonthAgo = new Date();
-        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-        dateMatch = { createdAt: { $gte: oneMonthAgo } };
-      }
+export const getLeaderboard = async (req: Request | any, res: Response): Promise<void> => {
+  try {
+    const { filter } = req.query;
+    let dateMatch: any = {};
 
-      // 2. Score Calculation Logic based on Filter
-      let scoreCalc: any;
-      if (filter === 'resources') {
-        scoreCalc = { $multiply: [{ $size: '$userResources' }, 10] }; // Only Resource Points
-      } else if (filter === 'query_replies') {
-        scoreCalc = { 
-          $add: [
-            { $multiply: [{ $size: '$userReplies' }, 5] },
-            { $multiply: [{ $size: { $filter: { input: '$userReplies', as: 'reply', cond: { $eq: ['$$reply.isAcceptedAnswer', true] } } } }, 15] }
-          ] 
-        }; // Only Reply Points
-      } else {
-        scoreCalc = {
-          $add: [
-            { $multiply: [{ $size: '$userResources' }, 10] },
-            { $multiply: [{ $size: '$userReplies' }, 5] }, 
-            { $multiply: [{ $size: { $filter: { input: '$userReplies', as: 'reply', cond: { $eq: ['$$reply.isAcceptedAnswer', true] } } } }, 15] }
-          ]
-        }; // Overall Points
-      }
-
-      // 3. Aggregation Pipeline
-      const leaderboard = await User.aggregate([
-        {
-          $lookup: {
-            from: 'resources',
-            let: { userId: '$_id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$uploader', '$$userId'] }, ...dateMatch } }
-            ],
-            as: 'userResources'
-          }
-        },
-        {
-          $lookup: {
-            from: 'forumreplies',
-            let: { userId: '$_id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$author', '$$userId'] }, ...dateMatch } }
-            ],
-            as: 'userReplies'
-          }
-        },
-        {
-          $project: {
-            firstName: 1,
-            lastName: 1,
-            avatarUrl: 1,
-            department: 1, 
-            uploads: { $size: '$userResources' }, 
-            replies: { $size: '$userReplies' },   
-            score: scoreCalc
-          }
-        },
-        { $match: { score: { $gt: 0 } } }, // 🛑 PREVENTS ANYONE WITH 0 POINTS FROM SHOWING UP!
-        { $sort: { score: -1 } } 
-      ]);
-  
-      const currentUserId = getUserIdFromRequest(req);
-
-      res.status(200).json({ success: true, data: leaderboard, currentUserId });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
+    // 1. Time Filters
+    if (filter === 'this_week') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      dateMatch = { createdAt: { $gte: oneWeekAgo } };
+    } else if (filter === 'monthly') {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      dateMatch = { createdAt: { $gte: oneMonthAgo } };
     }
+
+    // 2. Score Calculation Logic based on Filter
+    let scoreCalc: any;
+    if (filter === 'resources') {
+      scoreCalc = { $multiply: [{ $size: '$userResources' }, 10] }; // Only Resource Points
+    } else if (filter === 'query_replies') {
+      scoreCalc = { 
+        $add: [
+          { $multiply: [{ $size: '$userReplies' }, 5] },
+          { $multiply: [{ $size: { $filter: { input: '$userReplies', as: 'reply', cond: { $eq: ['$$reply.isAcceptedAnswer', true] } } } }, 15] }
+        ] 
+      }; // Only Reply Points
+    } else {
+      scoreCalc = {
+        $add: [
+          { $multiply: [{ $size: '$userResources' }, 10] },
+          { $multiply: [{ $size: '$userReplies' }, 5] }, 
+          { $multiply: [{ $size: { $filter: { input: '$userReplies', as: 'reply', cond: { $eq: ['$$reply.isAcceptedAnswer', true] } } } }, 15] }
+        ]
+      }; // Overall Points
+    }
+
+    // 3. 🚀 OPTIMIZED Aggregation Pipeline
+    const leaderboard = await User.aggregate([
+      // 🚀 REMOVED the early $match on contributorPoints.
+      // Since the field is out of sync, it could accidentally hide active users!
+      {
+        $lookup: {
+          from: 'resources',
+          let: { userId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$uploader', '$$userId'] }, ...dateMatch } }
+          ],
+          as: 'userResources'
+        }
+      },
+      {
+        $lookup: {
+          from: 'forumreplies',
+          let: { userId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$author', '$$userId'] }, ...dateMatch } }
+          ],
+          as: 'userReplies'
+        }
+      },
+      {
+        $project: {
+          firstName: 1,
+          lastName: 1,
+          avatarUrl: 1,
+          department: 1, 
+          uploads: { $size: '$userResources' }, 
+          replies: { $size: '$userReplies' },   
+          // 🚀 THE FIX: Always use the dynamic scoreCalc!
+          // This guarantees 100% accuracy by calculating points in real-time from actual activity.
+          score: scoreCalc
+        }
+      },
+      // This match ensures we still safely filter out anyone with a true 0 score
+      { $match: { score: { $gt: 0 } } }, 
+      { $sort: { score: -1 } },
+      { $limit: 50 } 
+    ]);
+
+    const currentUserId = getUserIdFromRequest(req);
+
+    res.status(200).json({ success: true, data: leaderboard, currentUserId });
+  } catch (error: any) {
+    console.error("Leaderboard Aggregation Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 
@@ -466,7 +474,7 @@ export const updateProfileBanner = async (req: any, res: Response): Promise<void
     // 🚀 2. Save ONLY the clean secure URL string in MongoDB
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
-      { profileBanner: uploadResponse.secure_url },
+      { bannerUrl: uploadResponse.secure_url },
       { new: true }
     ).select('-password');
 

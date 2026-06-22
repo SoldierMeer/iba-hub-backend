@@ -2,114 +2,33 @@ import { Request, Response } from 'express';
 import Complaint from '../models/Complaint';
 import Notification from '../models/Notification';
 
-// @desc    Get all complaints (IBA Voice Feed)
-// @route   GET /api/v1/complaints
-// export const getComplaints = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const complaints = await Complaint.find({ moderationStatus: 'approved' })
-//       .populate('author', 'firstName lastName avatarUrl headline isAlumni')
-//       .populate('comments.user', 'firstName lastName avatarUrl')
-//       .sort({ createdAt: -1 });
-
-//     // SECURITY: Sanitize anonymous posts before sending them to the frontend
-//     const sanitizedComplaints = complaints.map(complaint => {
-//       // Convert mongoose document to a plain JavaScript object so we can modify it
-//       const doc = complaint.toObject(); 
-      
-//       if (doc.isAnonymous) {
-//         doc.author = {
-//           _id: 'anonymous_id',
-//           firstName: 'Anonymous',
-//           lastName: 'Student',
-//           avatarUrl: '',
-//           headline: 'Identity hidden for privacy'
-//         };
-//       }
-//       return doc;
-//     });
-
-//     res.status(200).json({ success: true, count: sanitizedComplaints.length, data: sanitizedComplaints });
-//   } catch (error: any) {
-//     res.status(500).json({ success: false, message: error.message });
-//   }
-// };
-
-// export const getComplaints = async (req: Request, res: Response): Promise<void> => {
-//   try {
-//     const complaints = await Complaint.find({ moderationStatus: 'approved' })
-//       .populate('author', 'firstName lastName avatarUrl headline isAlumni')
-//       .populate('comments.user', 'firstName lastName avatarUrl')
-//       .sort({ createdAt: -1 })
-//       .limit(20) // 🚀 1. THE CURE: Only fetch the 20 most recent complaints
-//       .lean();   // 🚀 2. MASSIVE SPEEDUP: Returns plain JS objects directly from MongoDB
-
-//     // SECURITY: Sanitize anonymous posts before sending them to the frontend
-//     const sanitizedComplaints = complaints.map(complaint => {
-//       // 🚀 3. No need for .toObject() anymore because .lean() already did it!
-//       const doc = complaint as any; 
-      
-//       if (doc.isAnonymous) {
-//         doc.author = {
-//           _id: 'anonymous_id',
-//           firstName: 'Anonymous',
-//           lastName: 'Student',
-//           avatarUrl: '',
-//           headline: 'Identity hidden for privacy'
-//         };
-//       }
-
-//       // Optional Pro-Tip: If a complaint goes viral and has 300 comments, 
-//       // it will crash the mobile browser. Let's only send the latest 3 comments!
-//       if (doc.comments && doc.comments.length > 3) {
-//          doc.commentCount = doc.comments.length; // Tell the UI how many there are
-//          doc.comments = doc.comments.slice(-3);  // Only send the last 3
-//       }
-
-//       return doc;
-//     });
-
-//     res.status(200).json({ 
-//       success: true, 
-//       count: sanitizedComplaints.length, 
-//       data: sanitizedComplaints 
-//     });
-//   } catch (error: any) {
-//     res.status(500).json({ success: false, message: error.message });
-//   }
-// };
+// 🚀 CRITICAL OPTIMIZATION: Global Stats Cache
+// This prevents MongoDB from recalculating the exact same global stats 3,000 times.
+let cachedGlobalStats: any = null;
+let lastStatsCacheTime = 0;
 
 // @desc    Get all complaints (IBA Voice Feed)
 // @route   GET /api/v1/complaints
 export const getComplaints = async (req: Request, res: Response): Promise<void> => {
   try {
-    // 1. Extract Pagination from the request URL
     const page = parseInt(req.query.page as string, 10) || 1;
     const limit = parseInt(req.query.limit as string, 10) || 10;
     const skip = (page - 1) * limit;
 
-    // 🚀 THE FIX: Extract all 3 filters from the query
     const { category, status, department } = req.query;
 
     let matchQuery: any = { moderationStatus: 'approved' };
     
-    // 🚀 THE FIX: Only apply the filter to the database if it doesn't say "All"
     if (category && category !== 'All') matchQuery.category = category;
     if (status && status !== 'All') matchQuery.status = status;
     if (department && department !== 'All') matchQuery.department = department;
 
-    // 3. RUN QUERIES IN PARALLEL
-    const [complaints, totalFilteredCount, statsData] = await Promise.all([
-      Complaint.find(matchQuery)
-        .populate('author', 'firstName lastName avatarUrl headline isAlumni')
-        .populate('comments.user', 'firstName lastName avatarUrl')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      
-      Complaint.countDocuments(matchQuery),
+    const now = Date.now();
+    let statsData = cachedGlobalStats;
 
-      Complaint.aggregate([
+    // 🚀 CACHE CHECK: Only run the heavy aggregation if 60 seconds have passed!
+    if (!statsData || now - lastStatsCacheTime > 60000) {
+      statsData = await Complaint.aggregate([
         { $match: { moderationStatus: 'approved' } },
         { 
           $group: {
@@ -130,7 +49,22 @@ export const getComplaints = async (req: Request, res: Response): Promise<void> 
             }
           }
         }
-      ])
+      ]);
+      cachedGlobalStats = statsData;
+      lastStatsCacheTime = now;
+    }
+
+    // RUN THE FAST QUERIES IN PARALLEL
+    const [complaints, totalFilteredCount] = await Promise.all([
+      Complaint.find(matchQuery)
+        .populate('author', 'firstName lastName avatarUrl headline isAlumni')
+        .populate('comments.user', 'firstName lastName avatarUrl')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      
+      Complaint.countDocuments(matchQuery)
     ]);
 
     // Format global stats
@@ -183,11 +117,8 @@ export const getComplaints = async (req: Request, res: Response): Promise<void> 
 
 // @desc    Create a new complaint/issue
 // @route   POST /api/v1/complaints
-// @desc    Create a new complaint/issue
-// @route   POST /api/v1/complaints
 export const createComplaint = async (req: Request | any, res: Response): Promise<void> => {
     try {
-      // 1. Extract department from req.body
       const { title, description, category, department, mediaUrl, isAnonymous } = req.body;
       
       const newComplaint = await Complaint.create({
@@ -195,17 +126,17 @@ export const createComplaint = async (req: Request | any, res: Response): Promis
         title,
         description,
         category,
-        department, // 👈 2. Pass it into the creation object
+        department,
         mediaUrl,
         isAnonymous
       });
   
       await newComplaint.populate('author', 'firstName lastName avatarUrl headline');
   
-      const doc: any = newComplaint.toObject(); // 👈 1. Cast doc as any
+      const doc: any = newComplaint.toObject();
       if (doc.isAnonymous) {
         doc.author = {
-          _id: 'anonymous_id' as any, // 👈 2. Bypass the ObjectId check
+          _id: 'anonymous_id' as any,
           firstName: 'Anonymous',
           lastName: 'Student',
           avatarUrl: '',
@@ -221,61 +152,16 @@ export const createComplaint = async (req: Request | any, res: Response): Promis
 
 // @desc    Toggle upvote on a complaint
 // @route   PUT /api/v1/complaints/:id/upvote
-// @desc    Toggle upvote on a complaint
-// @route   PUT /api/v1/complaints/:id/upvote
-// @desc    Toggle upvote on a complaint
-// @route   PUT /api/v1/complaints/:id/upvote
-// export const toggleUpvote = async (req: Request | any, res: Response): Promise<void> => {
-//     try {
-//       const complaint = await Complaint.findById(req.params.id);
-  
-//       if (!complaint) {
-//         res.status(404).json({ success: false, message: 'Complaint not found' });
-//         return;
-//       }
-  
-//       // Defensive check: Ensure user exists in request
-//       if (!req.user || !req.user._id) {
-//         res.status(401).json({ success: false, message: 'User not authenticated properly' });
-//         return;
-//       }
-  
-//       if (!complaint.upvotes) {
-//         complaint.upvotes = [];
-//       }
-  
-//       const userId = req.user._id.toString();
-//       const upvoteIndex = complaint.upvotes.findIndex((id: any) => id && id.toString() === userId);
-  
-//       if (upvoteIndex !== -1) {
-//         complaint.upvotes.splice(upvoteIndex, 1);
-//       } else {
-//         complaint.upvotes.push(req.user._id);
-//       }
-  
-//       await complaint.save();
-  
-//       res.status(200).json({ success: true, data: complaint.upvotes });
-//     } catch (error: any) {
-//       // 🚨 THIS WILL PRINT THE EXACT CRASH REASON TO YOUR BACKEND TERMINAL
-//       console.error("🔥 BACKEND UPVOTE CRASH:", error);
-//       res.status(500).json({ success: false, message: error.message });
-//     }
-// };
-  
 export const toggleUpvote = async (req: Request | any, res: Response): Promise<void> => {
   try {
     const complaintId = req.params.id;
     
-    // Defensive check: Ensure user exists in request
     if (!req.user || !req.user._id) {
       res.status(401).json({ success: false, message: 'User not authenticated properly' });
       return;
     }
 
     const userId = req.user._id.toString();
-
-    // 1. Fetch the document just to check if it exists and current status
     const complaint = await Complaint.findById(complaintId);
 
     if (!complaint) {
@@ -283,21 +169,17 @@ export const toggleUpvote = async (req: Request | any, res: Response): Promise<v
       return;
     }
 
-    // 2. Check if the user is already in the array
     const hasUpvoted = complaint.upvotes?.some((id: any) => id && id.toString() === userId);
-
     let updatedComplaint;
 
-    // 3. 🚀 THE FIX: Use atomic operations directly on the database
+    // ATOMIC UPDATES: Super fast and race-condition free
     if (hasUpvoted) {
-      // Atomic Pull: Safely removes the specific ID without touching the rest of the document
       updatedComplaint = await Complaint.findByIdAndUpdate(
           complaintId, 
           { $pull: { upvotes: userId as any } },
-          { new: true } // Tells Mongoose to return the newly updated document
+          { new: true } 
       );
     } else {
-      // Atomic Add: Safely adds the ID (only if it doesn't already exist)
       updatedComplaint = await Complaint.findByIdAndUpdate(
           complaintId, 
           { $addToSet: { upvotes: userId as any } },
@@ -323,28 +205,27 @@ export const addComment = async (req: Request | any, res: Response): Promise<voi
         return;
       }
   
-      const complaint = await Complaint.findById(req.params.id);
+      const newComment = {
+        user: req.user._id as any,
+        text,
+        createdAt: new Date()
+      };
+
+      // 🚀 CONCURRENCY FIX: Use $push to atomically add the comment
+      // This allows 1,000 students to comment simultaneously without throwing a VersionError crash
+      const complaint = await Complaint.findByIdAndUpdate(
+        req.params.id,
+        { $push: { comments: newComment } },
+        { new: true }
+      );
   
       if (!complaint) {
         res.status(404).json({ success: false, message: 'Complaint not found' });
         return;
       }
   
-      if (!complaint.comments) {
-        complaint.comments = [];
-      }
-  
-      complaint.comments.push({
-        user: req.user._id as any,
-        text,
-        createdAt: new Date()
-      });
-  
-      await complaint.save();
-
       // --- REAL-TIME NOTIFICATION TRIGGER ---
-    // Only notify if someone ELSE is commenting on the post
-    if (complaint.author.toString() !== req.user._id.toString()) {
+      if (complaint.author.toString() !== req.user._id.toString()) {
         const notification = await Notification.create({
           recipient: complaint.author as any,
           sender: req.user._id as any,
@@ -358,12 +239,10 @@ export const addComment = async (req: Request | any, res: Response): Promise<voi
       }
       // --------------------------------------
   
-      // Re-populate the user fields so the frontend gets the names and avatars
       await complaint.populate('comments.user', 'firstName lastName avatarUrl');
   
       res.status(201).json({ success: true, data: complaint.comments });
     } catch (error: any) {
-      // 🚨 THIS WILL PRINT THE EXACT CRASH REASON TO YOUR BACKEND TERMINAL
       console.error("🔥 BACKEND COMMENT CRASH:", error);
       res.status(500).json({ success: false, message: error.message });
     }
@@ -381,15 +260,13 @@ export const updateComplaintStatus = async (req: Request | any, res: Response): 
         return;
       }
   
-      // Update fields if they were provided in the request
       if (status) complaint.status = status;
       if (officialResponse !== undefined) complaint.officialResponse = officialResponse;
   
       await complaint.save();
 
       // --- REAL-TIME NOTIFICATION TRIGGER ---
-    // Notify the student that their issue status was changed
-    const notification = await Notification.create({
+      const notification = await Notification.create({
         recipient: complaint.author as any,
         sender: req.user._id as any,
         type: 'status_change',
@@ -397,12 +274,10 @@ export const updateComplaintStatus = async (req: Request | any, res: Response): 
         link: '/voice'
       });
   
-      // Send it to the user's screen instantly!
       const io = req.app.get('io');
       io.to(complaint.author.toString()).emit('new_notification', notification);
       // --------------------------------------
   
-      // Re-populate author and comments so the frontend gets the full object back
       await complaint.populate('author', 'firstName lastName avatarUrl headline');
       await complaint.populate('comments.user', 'firstName lastName avatarUrl');
   
@@ -424,7 +299,6 @@ export const toggleCommentLike = async (req: Request | any, res: Response): Prom
         return;
       }
   
-      // Find the specific comment inside the complaint's comments array
       const comment = complaint.comments.find(
         (c: any) => c._id.toString() === req.params.commentId
       );
@@ -434,7 +308,6 @@ export const toggleCommentLike = async (req: Request | any, res: Response): Prom
         return;
       }
   
-      // Ensure the upvotes array exists
       if (!comment.upvotes) {
         comment.upvotes = [];
       }
@@ -442,13 +315,14 @@ export const toggleCommentLike = async (req: Request | any, res: Response): Prom
       const userId = req.user._id.toString();
       const upvoteIndex = comment.upvotes.findIndex((id: any) => id && id.toString() === userId);
   
-      // Toggle logic
       if (upvoteIndex !== -1) {
-        comment.upvotes.splice(upvoteIndex, 1); // Remove like
+        comment.upvotes.splice(upvoteIndex, 1); 
       } else {
-        comment.upvotes.push(req.user._id as any); // Add like
+        comment.upvotes.push(req.user._id as any); 
       }
   
+      // Array updates on sub-documents can't easily be done atomically without massive complexity.
+      // Since comments aren't highly concurrent, .save() is acceptable here.
       await complaint.save();
   
       res.status(200).json({ success: true, data: comment.upvotes });
@@ -469,7 +343,6 @@ export const deleteComment = async (req: Request | any, res: Response): Promise<
         return;
       }
   
-      // Find the comment index
       const commentIndex = complaint.comments.findIndex(
         (c: any) => c._id.toString() === req.params.commentId
       );
@@ -481,7 +354,6 @@ export const deleteComment = async (req: Request | any, res: Response): Promise<
   
       const comment = complaint.comments[commentIndex];
   
-      // SECURITY: Ensure the user deleting is either the author of the comment OR an Admin/Moderator
       const isAuthor = comment.user.toString() === req.user._id.toString();
       const isAdmin = req.user.role === 'admin' || req.user.role === 'moderator';
   
@@ -490,7 +362,6 @@ export const deleteComment = async (req: Request | any, res: Response): Promise<
         return;
       }
   
-      // Remove the comment
       complaint.comments.splice(commentIndex, 1);
       await complaint.save();
   
@@ -512,7 +383,6 @@ export const deleteComplaint = async (req: Request | any, res: Response): Promis
         return;
       }
   
-      // SECURITY: Ensure the user deleting is the author OR an Admin/Moderator
       const isAuthor = complaint.author.toString() === req.user._id.toString();
       const isAdmin = req.user.role === 'admin' || req.user.role === 'moderator';
   

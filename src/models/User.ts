@@ -27,7 +27,8 @@ export interface IUser extends Document {
   role: 'student' | 'moderator' | 'admin';
   contributorPoints: number;
   isOnline: boolean;
-  mutedUsers: string[];
+  mutedUsers?: mongoose.Types.ObjectId[];   // 🚀 FIXED: Matched to Schema
+  blockedUsers?: mongoose.Types.ObjectId[];
   matchPassword(enteredPassword: string): Promise<boolean>;
 }
 
@@ -38,11 +39,13 @@ const UserSchema: Schema = new Schema(
       type: String,
       required: [true, 'First name is required'],
       trim: true,
+      index: true
     },
     lastName: {
       type: String,
       required: [true, 'Last name is required'],
       trim: true,
+      index: true
     },
     bio: {
         type: String,
@@ -61,6 +64,7 @@ const UserSchema: Schema = new Schema(
     isAlumni: {
         type: Boolean,
         default: false,
+        index: true
     },
     graduationYear: {
         type: Number, // Auto-calculated from email (e.g., 2027)
@@ -156,6 +160,7 @@ const UserSchema: Schema = new Schema(
     isOnline: {
       type: Boolean,
       default: false, // Used for the "Peer Connect" chat green dot
+      index: true
     },
     mutedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],

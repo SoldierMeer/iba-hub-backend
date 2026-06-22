@@ -48,6 +48,7 @@ const ResourceSchema: Schema = new Schema(
       type: String,
       required: true,
       enum: ['Computer Science', 'Software Engineering', 'BBA', 'Accounting & Finance', 'Mathematics', 'Other'],
+      index: true
     },
     fileUrl: {
       type: String,
@@ -65,6 +66,7 @@ const ResourceSchema: Schema = new Schema(
       type: String,
       enum: ['pdf', 'image', 'document', 'other', 'link', 'zip', 'ppt','txt', 'PDF', 'Image', 'Document', 'Link', 'Zip', 'PPT', 'TXT'],
       default: 'Document',
+      index: true
     },
     // 🚀 3-TIER STORAGE ARCHITECTURE ADDITIONS
     storageProvider: {
@@ -88,6 +90,7 @@ const ResourceSchema: Schema = new Schema(
         type: String,
         enum: ['pending', 'approved', 'rejected'],
         default: 'pending',
+        index: true
     },
   },
   { timestamps: true }

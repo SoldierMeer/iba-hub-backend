@@ -137,7 +137,7 @@ export const acceptReply = async (req: AuthRequest, res: Response): Promise<void
   
         // 4. Safely reward new user
         try {
-          await User.findByIdAndUpdate(reply.author, { $inc: { score: 15 } });
+          await User.findByIdAndUpdate(reply.author, { $inc: { contributorPoints: 15 } });
         } catch (e) { console.log("Could not update user score"); }
   
       } else {
@@ -149,7 +149,7 @@ export const acceptReply = async (req: AuthRequest, res: Response): Promise<void
         await post.save();
   
         try {
-          await User.findByIdAndUpdate(reply.author, { $inc: { score: -15 } });
+          await User.findByIdAndUpdate(reply.author, { $inc: { contributorPoints: -15 } });
         } catch (e) { console.log("Could not update user score"); }
       }
   

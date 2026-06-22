@@ -30,6 +30,7 @@ const ForumPostSchema: Schema = new Schema(
       type: String,
       default: 'General',
       enum: ['Academics & Courses', 'Campus & Hostel', 'Admissions & Finance', 'Societies & Events', 'Career & Internships', 'Alumni Network', 'General Discussion'],
+      index: true
     },
     author: {
       type: mongoose.Schema.Types.ObjectId,

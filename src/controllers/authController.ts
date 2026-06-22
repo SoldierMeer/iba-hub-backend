@@ -254,6 +254,8 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         }
     }
 
+    const dynamicAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + ' ' + lastName)}&background=0f172a&color=fff&bold=true`;
+
     const user = await User.create({
       firstName,
       lastName,
@@ -265,7 +267,8 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       isAlumni: isAlumni || false,
       graduationYear: calculatedGradYear,
       batch: admissionYear ? admissionYear.toString() : '',
-      currentPosition: currentPosition || '',
+      currentPosition: isAlumni ? (currentPosition || '') : '',
+      avatarUrl: dynamicAvatarUrl,
     });
 
     if (user) {
