@@ -170,7 +170,8 @@ export const createPost = async (req: AuthRequest, res: Response): Promise<void>
       title,
       content,
       tags,
-      category: category || 'General', // Added category saving
+      // 🚀 FIXED: Now matches your Schema Enum exactly
+      category: category === 'General' ? 'General Discussion' : (category || 'General Discussion'), 
       author: req.user?._id,
     });
 
